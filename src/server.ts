@@ -101,6 +101,77 @@ function getDocumentSettings(resource: string): Thenable<any> {
     return result;
 }
 
+function maskLineForCode(
+    line: string,
+    state: { inBlockComment: boolean; inDoubleQuote: boolean; inSingleQuote: boolean; escaped: boolean }
+): string {
+    const output = line.split('');
+
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        const nextChar = line[i + 1];
+
+        if (state.inBlockComment) {
+            output[i] = ' ';
+            if (char === '*' && nextChar === '/') {
+                output[i + 1] = ' ';
+                state.inBlockComment = false;
+                i++;
+            }
+            continue;
+        }
+
+        if (state.inDoubleQuote || state.inSingleQuote) {
+            output[i] = ' ';
+            if (state.escaped) {
+                state.escaped = false;
+                continue;
+            }
+
+            if (char === '\\') {
+                state.escaped = true;
+                continue;
+            }
+
+            if (state.inDoubleQuote && char === '"') {
+                state.inDoubleQuote = false;
+            } else if (state.inSingleQuote && char === '\'') {
+                state.inSingleQuote = false;
+            }
+            continue;
+        }
+
+        if (char === '/' && nextChar === '/') {
+            for (let j = i; j < line.length; j++) {
+                output[j] = ' ';
+            }
+            break;
+        }
+
+        if (char === '/' && nextChar === '*') {
+            output[i] = ' ';
+            output[i + 1] = ' ';
+            state.inBlockComment = true;
+            i++;
+            continue;
+        }
+
+        if (char === '"') {
+            output[i] = ' ';
+            state.inDoubleQuote = true;
+            continue;
+        }
+
+        if (char === '\'') {
+            output[i] = ' ';
+            state.inSingleQuote = true;
+            continue;
+        }
+    }
+
+    return output.join('');
+}
+
 // 监听文档变化并验证
 documents.onDidOpen(change => {
     validateTextDocument(change.document);
@@ -116,17 +187,22 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
     // 获取文档内容
     const text = textDocument.getText();
     const lines = text.split(/\r?\n/g);
+    const maskState = { inBlockComment: false, inDoubleQuote: false, inSingleQuote: false, escaped: false };
+    let doubleQuoteStart: { line: number; character: number } | null = null;
+    let singleQuoteStart: { line: number; character: number } | null = null;
 
     // 遍历每一行检查错误
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
+        const maskedLine = maskLineForCode(line, maskState);
         
         // 检查一些常见的错误模式
-        if (line.toLowerCase().includes('error')) {
+        const errorIndex = maskedLine.toLowerCase().indexOf('error');
+        if (errorIndex !== -1) {
             diagnostics.push(
                 Diagnostic.create(
-                    { start: { line: i, character: line.toLowerCase().indexOf('error') }, 
-                      end: { line: i, character: line.toLowerCase().indexOf('error') + 5 } },
+                    { start: { line: i, character: errorIndex }, 
+                      end: { line: i, character: errorIndex + 5 } },
                     'Found error keyword in line',
                     DiagnosticSeverity.Error,
                     100,
@@ -136,13 +212,13 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
         }
         
         // 检查语法错误：未闭合的括号
-        const openParen = (line.match(/\(/g) || []).length;
-        const closeParen = (line.match(/\)/g) || []).length;
+        const openParen = (maskedLine.match(/\(/g) || []).length;
+        const closeParen = (maskedLine.match(/\)/g) || []).length;
         if (openParen > closeParen) {
             diagnostics.push(
                 Diagnostic.create(
                     { start: { line: i, character: 0 }, 
-                      end: { line: i, character: line.length } },
+                      end: { line: i, character: maskedLine.length } },
                     'Unmatched parentheses',
                     DiagnosticSeverity.Warning,
                     101,
@@ -150,36 +226,52 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                 )
             );
         }
-        
-        // 检查未闭合的引号
-        const singleQuotes = (line.match(/'/g) || []).length;
-        const doubleQuotes = (line.match(/"/g) || []).length;
-        
-        if (singleQuotes % 2 !== 0) {
-            diagnostics.push(
-                Diagnostic.create(
-                    { start: { line: i, character: 0 }, 
-                      end: { line: i, character: line.length } },
-                    'Unmatched single quotes',
-                    DiagnosticSeverity.Warning,
-                    102,
-                    'VixChecker'
-                )
-            );
+
+        if (maskState.inDoubleQuote && doubleQuoteStart === null) {
+            doubleQuoteStart = { line: i, character: 0 };
         }
-        
-        if (doubleQuotes % 2 !== 0) {
-            diagnostics.push(
-                Diagnostic.create(
-                    { start: { line: i, character: 0 }, 
-                      end: { line: i, character: line.length } },
-                    'Unmatched double quotes',
-                    DiagnosticSeverity.Warning,
-                    103,
-                    'VixChecker'
-                )
-            );
+
+        if (maskState.inSingleQuote && singleQuoteStart === null) {
+            singleQuoteStart = { line: i, character: 0 };
         }
+
+        if (!maskState.inDoubleQuote) {
+            doubleQuoteStart = null;
+        }
+
+        if (!maskState.inSingleQuote) {
+            singleQuoteStart = null;
+        }
+    }
+
+    if (maskState.inDoubleQuote && doubleQuoteStart) {
+        diagnostics.push(
+            Diagnostic.create(
+                {
+                    start: doubleQuoteStart,
+                    end: { line: lines.length - 1, character: lines[lines.length - 1]?.length || 0 }
+                },
+                'Unterminated double-quoted string',
+                DiagnosticSeverity.Warning,
+                103,
+                'VixChecker'
+            )
+        );
+    }
+
+    if (maskState.inSingleQuote && singleQuoteStart) {
+        diagnostics.push(
+            Diagnostic.create(
+                {
+                    start: singleQuoteStart,
+                    end: { line: lines.length - 1, character: lines[lines.length - 1]?.length || 0 }
+                },
+                'Unterminated single-quoted string',
+                DiagnosticSeverity.Warning,
+                102,
+                'VixChecker'
+            )
+        );
     }
 
     // 发送诊断信息到客户端

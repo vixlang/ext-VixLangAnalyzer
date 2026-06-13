@@ -21,8 +21,8 @@
       "aliases": ["Vix", "vix"],
       "extensions": [".vix"],
       "icon": {
-        "light": "images/logo.png",
-        "dark": "images/logo.png"
+        "light": "images/204409FLGoPP19DNtcmxf0.png",
+        "dark": "images/204409FLGoPP19DNtcmxf0.png"
       },
       "configuration": "./language-configuration.json"
     }],
