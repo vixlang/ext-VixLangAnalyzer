@@ -2,7 +2,7 @@
   "name": "vix",
   "displayName": "Vix Language Support",
   "description": "为 Vix 语言提供核心语言支持，包括语法高亮、智能代码补全（IntelliSense）和实时错误诊断提示",
-  "version": "0.0.1",
+  "version": "0.1.3",
   "publisher": "vix-team",
   "engines": {
     "vscode": "^1.109.0"
@@ -21,8 +21,8 @@
       "aliases": ["Vix", "vix"],
       "extensions": [".vix"],
       "icon": {
-        "light": "images/204409FLGoPP19DNtcmxf0.png",
-        "dark": "images/204409FLGoPP19DNtcmxf0.png"
+        "light": "images/logo.png",
+        "dark": "images/logo.png"
       },
       "configuration": "./language-configuration.json"
     }],
