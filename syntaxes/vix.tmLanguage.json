@@ -6,6 +6,9 @@
 	],
 	"patterns": [
 		{
+			"include": "#declarations"
+		},
+		{
 			"include": "#keywords"
 		},
 		{
@@ -19,10 +22,34 @@
 		}
 	],
 	"repository": {
+		"declarations": {
+			"patterns": [
+				{
+					"match": "\\b(let|var|const)\\b(?:\\s+(mut)\\b)?\\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\\s*(:)\\s*([a-zA-Z_][a-zA-Z0-9_]*))?",
+					"captures": {
+						"1": {
+							"name": "storage.type.variable.vix keyword.declaration.variable.vix"
+						},
+						"2": {
+							"name": "storage.modifier.mutable.vix"
+						},
+						"3": {
+							"name": "variable.other.readwrite.declaration.vix"
+						},
+						"4": {
+							"name": "punctuation.separator.type.vix"
+						},
+						"5": {
+							"name": "storage.type.vix entity.name.type.vix"
+						}
+					}
+				}
+			]
+		},
 		"keywords": {
 			"patterns": [{
 				"name": "keyword.control.vix",
-				"match": "\\b(if|while|for|return|extern|import|char|pub|const|type|match)\\b"
+				"match": "\\b(if|while|for|return|extern|import|pub|type|match|struct|obj|meth|field|impl|as|public|elif|else|break|continue|in|and|or)\\b"
 			}]
 		},
 		"member-access": {

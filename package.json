@@ -31,6 +31,11 @@
       "scopeName": "source.vix",
       "path": "./syntaxes/vix.json"
     }],
+    "themes": [{
+      "label": "Vix Aurora Dark",
+      "uiTheme": "vs-dark",
+      "path": "./theme/theme.json"
+    }],
     "commands": [{
       "command": "vix.compile",
       "title": "Compile Vix",
