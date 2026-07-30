@@ -20,6 +20,7 @@ let compileOutput: OutputChannel;
 const AUTO_COMPILE_ARGS = '-ast';
 const autoCompileTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const GENERATED_EXTENSIONS = ['.o', '.obj', '.s', '.asm'];
+type CompilerErrorFormat = 'bootstrap' | 'c-cpp' | 'none';
 
 interface CompileOption {
     label: string;
@@ -57,8 +58,20 @@ function getCompileOptions(): CompileOption[] {
  *     |
  *   = help: hint message
  */
-function parseCompilerOutput(output: string, sourceFilePath: string): Map<string, Diagnostic[]> {
+function getCompilerErrorFormat(): CompilerErrorFormat {
+    return workspace.getConfiguration('vix').get<CompilerErrorFormat>('compilerErrorFormat', 'bootstrap');
+}
+
+function parseCompilerOutput(
+    output: string,
+    sourceFilePath: string,
+    errorFormat: CompilerErrorFormat
+): Map<string, Diagnostic[]> {
     const diagnosticsByFile = new Map<string, Diagnostic[]>();
+    if (errorFormat === 'none') {
+        return diagnosticsByFile;
+    }
+
     const lines = output.split(/\r?\n/);
 
     // Pass: parse Rust-style multi-line errors
@@ -66,12 +79,17 @@ function parseCompilerOutput(output: string, sourceFilePath: string): Map<string
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
 
-        // Match: "error [Category]: message" or "warning [Category]: message"
-        const sevMatch = /^(error|warning|note|info)(?:\s*\[\w+\])?\s*:\s*(.+)/i.exec(line);
+        const sevMatch = /^(error|warning|note|info)\s*\[([^\]]+)\]\s*:\s*(.+)/i.exec(line);
         if (!sevMatch) continue;
 
+        const tag = sevMatch[2];
+        const matchesFormat = errorFormat === 'bootstrap'
+            ? /\([^)]+\)/.test(tag)
+            : !/\([^)]+\)/.test(tag);
+        if (!matchesFormat) continue;
+
         const severity = sevMatch[1];
-        const message = sevMatch[2];
+        const message = sevMatch[3];
 
         // Look ahead for "--> file:line:col"
         for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
@@ -89,7 +107,7 @@ function parseCompilerOutput(output: string, sourceFilePath: string): Map<string
     }
 
     // If Rust-style parsing found nothing, try single-line patterns (GCC/Clang/MSVC)
-    if (diagnosticsByFile.size === 0) {
+    if (errorFormat === 'c-cpp' && diagnosticsByFile.size === 0) {
         const singleLinePatterns: RegExp[] = [
             // file:line:col: severity: message  (GCC/Clang)
             /^(.+?):(\d+):(\d+):\s*(error|warning|note|info|fatal error)\s*:?\s*(.*)/i,
@@ -194,6 +212,12 @@ async function compileDocument(document: TextDocument, extraArgs: string, showTe
         return;
     }
 
+    const errorFormat = getCompilerErrorFormat();
+    if (errorFormat === 'none' && !showTerminal) {
+        diagnosticCollection.delete(document.uri);
+        return;
+    }
+
     if (document.isDirty) {
         const saved = await document.save();
         if (!saved) {
@@ -243,14 +267,14 @@ async function compileDocument(document: TextDocument, extraArgs: string, showTe
         }
 
         // Parse compiler output for diagnostics
-        const diagnosticsMap = parseCompilerOutput(allOutput, filePath);
+        const diagnosticsMap = parseCompilerOutput(allOutput, filePath, errorFormat);
 
         if (diagnosticsMap.size > 0) {
             for (const [file, diags] of diagnosticsMap) {
                 diagnosticCollection.set(Uri.file(file), diags);
             }
             window.setStatusBarMessage('$(error) Vix: Compilation finished with errors', 3000);
-        } else if (error) {
+        } else if (error && errorFormat !== 'none') {
             // Compiler exited with non-zero but we couldn't parse specific errors
             const fallbackDiag = new Diagnostic(
                 new Range(new Position(0, 0), new Position(0, 0)),
@@ -260,6 +284,8 @@ async function compileDocument(document: TextDocument, extraArgs: string, showTe
             fallbackDiag.source = 'vixc';
             diagnosticCollection.set(Uri.file(filePath), [fallbackDiag]);
             window.setStatusBarMessage('$(error) Vix: Compilation failed', 3000);
+        } else if (error) {
+            window.setStatusBarMessage('$(error) Vix: Compilation failed (diagnostics disabled)', 3000);
         } else {
             // Output exists but no parsed diagnostics — show as info
             window.setStatusBarMessage('$(check) Vix: Compiled successfully', 3000);
@@ -294,6 +320,12 @@ function scheduleAutoCompile(document: TextDocument): void {
     const existingTimer = autoCompileTimers.get(key);
     if (existingTimer) {
         clearTimeout(existingTimer);
+        autoCompileTimers.delete(key);
+    }
+
+    if (getCompilerErrorFormat() === 'none') {
+        diagnosticCollection.delete(document.uri);
+        return;
     }
 
     const timer = setTimeout(() => {
@@ -372,6 +404,24 @@ export async function activate(context: ExtensionContext) {
     context.subscriptions.push(
         workspace.onDidChangeTextDocument((event) => {
             scheduleAutoCompile(event.document);
+        })
+    );
+
+    context.subscriptions.push(
+        workspace.onDidChangeConfiguration((event) => {
+            if (!event.affectsConfiguration('vix.compilerErrorFormat')) {
+                return;
+            }
+
+            diagnosticCollection.clear();
+            for (const timer of autoCompileTimers.values()) {
+                clearTimeout(timer);
+            }
+            autoCompileTimers.clear();
+
+            if (getCompilerErrorFormat() !== 'none') {
+                workspace.textDocuments.forEach(scheduleAutoCompile);
+            }
         })
     );
 

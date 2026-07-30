@@ -104,6 +104,21 @@
           "type": "string",
           "default": "vixc",
           "description": "Path to the vixc compiler executable."
+        },
+        "vix.compilerErrorFormat": {
+          "type": "string",
+          "enum": [
+            "bootstrap",
+            "c-cpp",
+            "none"
+          ],
+          "enumItemLabels": [
+            "Bootstrap Error",
+            "C/CPP Error",
+            "No Errors"
+          ],
+          "default": "bootstrap",
+          "description": "Select the vixc compiler error format used for diagnostics, or disable compiler diagnostics."
         }
       }
     }

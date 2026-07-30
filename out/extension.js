@@ -65,19 +65,30 @@ function getCompileOptions() {
  *     |
  *   = help: hint message
  */
-function parseCompilerOutput(output, sourceFilePath) {
+function getCompilerErrorFormat() {
+    return vscode_1.workspace.getConfiguration('vix').get('compilerErrorFormat', 'bootstrap');
+}
+function parseCompilerOutput(output, sourceFilePath, errorFormat) {
     const diagnosticsByFile = new Map();
+    if (errorFormat === 'none') {
+        return diagnosticsByFile;
+    }
     const lines = output.split(/\r?\n/);
     // Pass: parse Rust-style multi-line errors
     // First collect all "severity [tag]: message" + "--> file:line:col" pairs
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        // Match: "error [Category]: message" or "warning [Category]: message"
-        const sevMatch = /^(error|warning|note|info)(?:\s*\[\w+\])?\s*:\s*(.+)/i.exec(line);
+        const sevMatch = /^(error|warning|note|info)\s*\[([^\]]+)\]\s*:\s*(.+)/i.exec(line);
         if (!sevMatch)
             continue;
+        const tag = sevMatch[2];
+        const matchesFormat = errorFormat === 'bootstrap'
+            ? /\([^)]+\)/.test(tag)
+            : !/\([^)]+\)/.test(tag);
+        if (!matchesFormat)
+            continue;
         const severity = sevMatch[1];
-        const message = sevMatch[2];
+        const message = sevMatch[3];
         // Look ahead for "--> file:line:col"
         for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
             const pointerLine = lines[j].trim();
@@ -92,7 +103,7 @@ function parseCompilerOutput(output, sourceFilePath) {
         }
     }
     // If Rust-style parsing found nothing, try single-line patterns (GCC/Clang/MSVC)
-    if (diagnosticsByFile.size === 0) {
+    if (errorFormat === 'c-cpp' && diagnosticsByFile.size === 0) {
         const singleLinePatterns = [
             // file:line:col: severity: message  (GCC/Clang)
             /^(.+?):(\d+):(\d+):\s*(error|warning|note|info|fatal error)\s*:?\s*(.*)/i,
@@ -175,6 +186,11 @@ async function compileDocument(document, extraArgs, showTerminal) {
     if (document.languageId !== 'vix' || document.uri.scheme !== 'file') {
         return;
     }
+    const errorFormat = getCompilerErrorFormat();
+    if (errorFormat === 'none' && !showTerminal) {
+        diagnosticCollection.delete(document.uri);
+        return;
+    }
     if (document.isDirty) {
         const saved = await document.save();
         if (!saved) {
@@ -216,19 +232,22 @@ async function compileDocument(document, extraArgs, showTerminal) {
             return;
         }
         // Parse compiler output for diagnostics
-        const diagnosticsMap = parseCompilerOutput(allOutput, filePath);
+        const diagnosticsMap = parseCompilerOutput(allOutput, filePath, errorFormat);
         if (diagnosticsMap.size > 0) {
             for (const [file, diags] of diagnosticsMap) {
                 diagnosticCollection.set(vscode_1.Uri.file(file), diags);
             }
             vscode_1.window.setStatusBarMessage('$(error) Vix: Compilation finished with errors', 3000);
         }
-        else if (error) {
+        else if (error && errorFormat !== 'none') {
             // Compiler exited with non-zero but we couldn't parse specific errors
             const fallbackDiag = new vscode_1.Diagnostic(new vscode_1.Range(new vscode_1.Position(0, 0), new vscode_1.Position(0, 0)), `Compiler exited with code ${error.code || 'unknown'}: ${allOutput.trim() || error.message}`, vscode_1.DiagnosticSeverity.Error);
             fallbackDiag.source = 'vixc';
             diagnosticCollection.set(vscode_1.Uri.file(filePath), [fallbackDiag]);
             vscode_1.window.setStatusBarMessage('$(error) Vix: Compilation failed', 3000);
+        }
+        else if (error) {
+            vscode_1.window.setStatusBarMessage('$(error) Vix: Compilation failed (diagnostics disabled)', 3000);
         }
         else {
             // Output exists but no parsed diagnostics — show as info
@@ -260,6 +279,11 @@ function scheduleAutoCompile(document) {
     const existingTimer = autoCompileTimers.get(key);
     if (existingTimer) {
         clearTimeout(existingTimer);
+        autoCompileTimers.delete(key);
+    }
+    if (getCompilerErrorFormat() === 'none') {
+        diagnosticCollection.delete(document.uri);
+        return;
     }
     const timer = setTimeout(() => {
         autoCompileTimers.delete(key);
@@ -310,6 +334,19 @@ async function activate(context) {
     }));
     context.subscriptions.push(vscode_1.workspace.onDidChangeTextDocument((event) => {
         scheduleAutoCompile(event.document);
+    }));
+    context.subscriptions.push(vscode_1.workspace.onDidChangeConfiguration((event) => {
+        if (!event.affectsConfiguration('vix.compilerErrorFormat')) {
+            return;
+        }
+        diagnosticCollection.clear();
+        for (const timer of autoCompileTimers.values()) {
+            clearTimeout(timer);
+        }
+        autoCompileTimers.clear();
+        if (getCompilerErrorFormat() !== 'none') {
+            vscode_1.workspace.textDocuments.forEach(scheduleAutoCompile);
+        }
     }));
     context.subscriptions.push(vscode_1.workspace.onDidCloseTextDocument((doc) => {
         const key = doc.uri.toString();
