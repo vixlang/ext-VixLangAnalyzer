@@ -186,7 +186,7 @@ interface VixSymbolIndex {
 
 const BUILTIN_TYPES = new Set(['i8', 'i16', 'i32', 'i64', 'u8', 'u16', 'u32', 'u64', 'f32', 'f64', 'string', 'char', 'bool', 'void']);
 const BUILTIN_FUNCTIONS = new Set(['print', 'input', 'strlen', 'substr', 'printf', 'read', 'wait', 'parse', 'toint', 'tofloat', 'tostring', 'length', 'add', 'remove']);
-const VIX_KEYWORDS = new Set(['if', 'while', 'for', 'return', 'extern', 'fn', 'mut', 'let', 'const', 'struct', 'obj', 'meth', 'field', 'impl', 'as', 'public', 'pub', 'elif', 'else', 'break', 'continue', 'in', 'import', 'true', 'false', 'and', 'or', 'char', 'type', 'match']);
+const VIX_KEYWORDS = new Set(['if', 'while', 'for', 'return', 'extern', 'fn', 'mut', 'let', 'const', 'struct', 'obj', 'meth', 'field', 'impl', 'as', 'public', 'pub', 'elif', 'else', 'break', 'continue', 'in', 'import', 'mod', 'true', 'false', 'and', 'or', 'char', 'type', 'match']);
 
 function parseGenericParams(genericText?: string): string[] {
     if (!genericText) {
@@ -1646,6 +1646,13 @@ connection.onCompletion(
                     detail: t('结构体定义', 'Struct definition')
                 },
                 {
+                    label: 'mod',
+                    kind: CompletionItemKind.Keyword,
+                    detail: t('模块声明', 'Module declaration'),
+                    insertText: 'mod ${1:name}',
+                    insertTextFormat: InsertTextFormat.Snippet
+                },
+                {
                     label: 'mut',
                     kind: CompletionItemKind.Keyword,
                     detail: t('可变变量声明', 'Mutable variable declaration')
@@ -1701,6 +1708,13 @@ connection.onCompletion(
                 { label: 'for', kind: CompletionItemKind.Keyword, detail: t('循环语句', 'Loop statement') },
                 { label: 'fn', kind: CompletionItemKind.Keyword, detail: t('函数定义', 'Function definition') },
                 { label: 'struct', kind: CompletionItemKind.Keyword, detail: t('结构体定义', 'Struct definition') },
+                {
+                    label: 'mod',
+                    kind: CompletionItemKind.Keyword,
+                    detail: t('模块声明', 'Module declaration'),
+                    insertText: 'mod ${1:name}',
+                    insertTextFormat: InsertTextFormat.Snippet
+                },
                 { label: 'mut', kind: CompletionItemKind.Keyword, detail: t('可变变量声明', 'Mutable variable declaration') },
                 { label: 'let', kind: CompletionItemKind.Keyword, detail: t('变量声明 (let)', 'Variable declaration (let)') },
                 { label: 'return', kind: CompletionItemKind.Keyword, detail: t('返回语句', 'Return statement') },

@@ -62,6 +62,14 @@ function getCompilerErrorFormat(): CompilerErrorFormat {
     return workspace.getConfiguration('vix').get<CompilerErrorFormat>('compilerErrorFormat', 'bootstrap');
 }
 
+function isAutoCompileEnabled(): boolean {
+    return workspace.getConfiguration('vix').get<boolean>('autoCompile', true);
+}
+
+function getAutoCompileDelay(): number {
+    return workspace.getConfiguration('vix').get<number>('autoCompileDelay', 700);
+}
+
 function parseCompilerOutput(
     output: string,
     sourceFilePath: string,
@@ -323,6 +331,11 @@ function scheduleAutoCompile(document: TextDocument): void {
         autoCompileTimers.delete(key);
     }
 
+    if (!isAutoCompileEnabled()) {
+        diagnosticCollection.delete(document.uri);
+        return;
+    }
+
     if (getCompilerErrorFormat() === 'none') {
         diagnosticCollection.delete(document.uri);
         return;
@@ -331,7 +344,7 @@ function scheduleAutoCompile(document: TextDocument): void {
     const timer = setTimeout(() => {
         autoCompileTimers.delete(key);
         void compileDocument(document, AUTO_COMPILE_ARGS, false);
-    }, 700);
+    }, getAutoCompileDelay());
 
     autoCompileTimers.set(key, timer);
 }
@@ -363,6 +376,22 @@ export async function activate(context: ExtensionContext) {
     // Main compile button — opens menu with all options
     context.subscriptions.push(
         commands.registerCommand('vix.compile', () => compileVix())
+    );
+
+    context.subscriptions.push(
+        commands.registerCommand('vix.reloadWindow', () => commands.executeCommand('workbench.action.reloadWindow')),
+        commands.registerCommand('vix.restartLanguageServer', async () => {
+            await client.restart();
+            window.showInformationMessage('Vix language server restarted.');
+        }),
+        commands.registerCommand('vix.formatDocument', async () => {
+            const editor = window.activeTextEditor;
+            if (!editor || editor.document.languageId !== 'vix') {
+                window.showWarningMessage('No active Vix document found.');
+                return;
+            }
+            await commands.executeCommand('editor.action.formatDocument');
+        })
     );
 
     // Direct compile commands with optimization level
@@ -409,7 +438,9 @@ export async function activate(context: ExtensionContext) {
 
     context.subscriptions.push(
         workspace.onDidChangeConfiguration((event) => {
-            if (!event.affectsConfiguration('vix.compilerErrorFormat')) {
+            if (!event.affectsConfiguration('vix.compilerErrorFormat')
+                && !event.affectsConfiguration('vix.autoCompile')
+                && !event.affectsConfiguration('vix.autoCompileDelay')) {
                 return;
             }
 
@@ -419,7 +450,7 @@ export async function activate(context: ExtensionContext) {
             }
             autoCompileTimers.clear();
 
-            if (getCompilerErrorFormat() !== 'none') {
+            if (isAutoCompileEnabled() && getCompilerErrorFormat() !== 'none') {
                 workspace.textDocuments.forEach(scheduleAutoCompile);
             }
         })

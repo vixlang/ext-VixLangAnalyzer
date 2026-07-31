@@ -49,7 +49,7 @@
 		"keywords": {
 			"patterns": [{
 				"name": "keyword.control.vix",
-				"match": "\\b(if|while|for|return|extern|import|pub|type|match|struct|obj|meth|field|impl|as|public|elif|else|break|continue|in|and|or)\\b"
+					"match": "\\b(if|while|for|return|extern|import|mod|pub|type|match|struct|obj|meth|field|impl|as|public|elif|else|break|continue|in|and|or)\\b"
 			}]
 		},
 		"member-access": {

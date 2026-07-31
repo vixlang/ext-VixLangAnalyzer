@@ -151,7 +151,7 @@
           "name": "storage.modifier.mutable.vix"
         },
         {
-          "match": "\\b(struct|obj|meth|field|impl|as|public|pub|for|while|if|elif|else|return|break|continue|in|import|type|match|and|or)\\b",
+          "match": "\\b(struct|obj|meth|field|impl|as|public|pub|for|while|if|elif|else|return|break|continue|in|import|mod|type|match|and|or)\\b",
           "name": "keyword.control.vix"
         },
         {

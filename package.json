@@ -11,7 +11,10 @@
     "Programming Languages"
   ],
   "activationEvents": [
-    "onLanguage:vix"
+    "onLanguage:vix",
+    "onCommand:vix.reloadWindow",
+    "onCommand:vix.restartLanguageServer",
+    "onCommand:vix.formatDocument"
   ],
   "main": "./out/extension.js",
   "icon": "images/logo.png",
@@ -44,6 +47,18 @@
       "command": "vix.showCompilerOutput",
       "title": "Vix: Show Compiler Output",
       "icon": "$(output)"
+    }, {
+      "command": "vix.reloadWindow",
+      "title": "Vix: Reload Window",
+      "icon": "$(refresh)"
+    }, {
+      "command": "vix.restartLanguageServer",
+      "title": "Vix: Restart Language Server",
+      "icon": "$(debug-restart)"
+    }, {
+      "command": "vix.formatDocument",
+      "title": "Vix: Format Document",
+      "icon": "$(wand)"
     }, {
       "command": "vix.compile.l0",
       "title": "Compile Vix (l0)"
@@ -86,6 +101,10 @@
         "command": "vix.compile",
         "when": "resourceLangId == vix",
         "group": "navigation"
+      }, {
+        "command": "vix.formatDocument",
+        "when": "resourceLangId == vix",
+        "group": "navigation@2"
       }]
     },
     "configuration": {
@@ -119,6 +138,18 @@
           ],
           "default": "bootstrap",
           "description": "Select the vixc compiler error format used for diagnostics, or disable compiler diagnostics."
+        },
+        "vix.autoCompile": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically compile open Vix files after edits to refresh compiler diagnostics."
+        },
+        "vix.autoCompileDelay": {
+          "type": "number",
+          "default": 700,
+          "minimum": 100,
+          "maximum": 5000,
+          "description": "Delay in milliseconds before automatically compiling an edited Vix file."
         }
       }
     }

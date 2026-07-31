@@ -1,10 +1,14 @@
+mod greet
+
 extern "C"
 {
     fn printf(fmt:string,...): i32
 }
 
-pub 
-
+pub fn a(): i32
+{
+    10
+}
 fn main(): i32
 {
     let x: i32 = 10
@@ -12,7 +16,12 @@ fn main(): i32
     {
         print(i)
     }
-    match 
+    match a()
+    {
+        10 -> {
+            print("a is 10")
+        }
+    }
     printf("Hello, World!\n")
     return 0
 }

@@ -68,6 +68,12 @@ function getCompileOptions() {
 function getCompilerErrorFormat() {
     return vscode_1.workspace.getConfiguration('vix').get('compilerErrorFormat', 'bootstrap');
 }
+function isAutoCompileEnabled() {
+    return vscode_1.workspace.getConfiguration('vix').get('autoCompile', true);
+}
+function getAutoCompileDelay() {
+    return vscode_1.workspace.getConfiguration('vix').get('autoCompileDelay', 700);
+}
 function parseCompilerOutput(output, sourceFilePath, errorFormat) {
     const diagnosticsByFile = new Map();
     if (errorFormat === 'none') {
@@ -281,6 +287,10 @@ function scheduleAutoCompile(document) {
         clearTimeout(existingTimer);
         autoCompileTimers.delete(key);
     }
+    if (!isAutoCompileEnabled()) {
+        diagnosticCollection.delete(document.uri);
+        return;
+    }
     if (getCompilerErrorFormat() === 'none') {
         diagnosticCollection.delete(document.uri);
         return;
@@ -288,7 +298,7 @@ function scheduleAutoCompile(document) {
     const timer = setTimeout(() => {
         autoCompileTimers.delete(key);
         void compileDocument(document, AUTO_COMPILE_ARGS, false);
-    }, 700);
+    }, getAutoCompileDelay());
     autoCompileTimers.set(key, timer);
 }
 async function compileVix() {
@@ -311,6 +321,17 @@ async function activate(context) {
     context.subscriptions.push(vscode_1.commands.registerCommand('vix.showCompilerOutput', () => compileOutput.show()));
     // Main compile button — opens menu with all options
     context.subscriptions.push(vscode_1.commands.registerCommand('vix.compile', () => compileVix()));
+    context.subscriptions.push(vscode_1.commands.registerCommand('vix.reloadWindow', () => vscode_1.commands.executeCommand('workbench.action.reloadWindow')), vscode_1.commands.registerCommand('vix.restartLanguageServer', async () => {
+        await client.restart();
+        vscode_1.window.showInformationMessage('Vix language server restarted.');
+    }), vscode_1.commands.registerCommand('vix.formatDocument', async () => {
+        const editor = vscode_1.window.activeTextEditor;
+        if (!editor || editor.document.languageId !== 'vix') {
+            vscode_1.window.showWarningMessage('No active Vix document found.');
+            return;
+        }
+        await vscode_1.commands.executeCommand('editor.action.formatDocument');
+    }));
     // Direct compile commands with optimization level
     for (let i = 0; i <= 3; i++) {
         context.subscriptions.push(vscode_1.commands.registerCommand(`vix.compile.l${i}`, () => runCompile(`-opt=l${i}`)));
@@ -336,7 +357,9 @@ async function activate(context) {
         scheduleAutoCompile(event.document);
     }));
     context.subscriptions.push(vscode_1.workspace.onDidChangeConfiguration((event) => {
-        if (!event.affectsConfiguration('vix.compilerErrorFormat')) {
+        if (!event.affectsConfiguration('vix.compilerErrorFormat')
+            && !event.affectsConfiguration('vix.autoCompile')
+            && !event.affectsConfiguration('vix.autoCompileDelay')) {
             return;
         }
         diagnosticCollection.clear();
@@ -344,7 +367,7 @@ async function activate(context) {
             clearTimeout(timer);
         }
         autoCompileTimers.clear();
-        if (getCompilerErrorFormat() !== 'none') {
+        if (isAutoCompileEnabled() && getCompilerErrorFormat() !== 'none') {
             vscode_1.workspace.textDocuments.forEach(scheduleAutoCompile);
         }
     }));
